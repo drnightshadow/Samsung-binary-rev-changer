@@ -1,14 +1,15 @@
 #!/usr/bin/python
 
-import os
 import argparse
+import os
+import pathlib
 
 verbose = 0
 
 binRevOffset = 8 # ********X****
 
 def parseArgs():
-    parser = argparse.ArgumentParser(description="change the binary version of Samsung firmware [v0.2]")
+    parser = argparse.ArgumentParser(description="change the binary version of Samsung firmware [v0.2.1]")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("filename", help="Filename (WITHOUT LZMA (NOT .LZ4))")
     parser.add_argument("target", help="Target binary revision")
@@ -46,10 +47,13 @@ def main():
     if args.verbose == True:
         verbose = 1
 
-    if "super" in args.filename:
-        print("WARNING WARNING WARNING")
+    if "super" in pathlib.Path(args.filename).stem:
         print("This tool won't work on super.imgs.")
         print("They're too big for the tool to handle.")
+        exit(2)
+
+    if ".lz4" in pathlib.Path(args.filename).suffix:
+        print("This tool doesn't support lz4 images.")
         exit(2)
 
     printVerbose("Trying to open file")
