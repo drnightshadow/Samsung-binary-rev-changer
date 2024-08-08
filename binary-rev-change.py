@@ -1,70 +1,86 @@
+#!/usr/bin/python
+
 import os
 import argparse
 
 verbose = 0
-just_print = 0
 
-bin_offset_990 = 0x20f
+binRevOffset = 8 # ********X****
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="change the binary version of Samsung firmware")
+def parseArgs():
+    parser = argparse.ArgumentParser(description="change the binary version of Samsung firmware [v0.2]")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-p", "--print", action="store_true")
     parser.add_argument("filename", help="Filename (WITHOUT LZMA (NOT .LZ4))")
     parser.add_argument("target", help="Target binary revision")
     args = parser.parse_args()
     return args
 
-def print_verbose(text):
+def printVerbose(text):
     if verbose == 1:
-        print(text)
+        print("[D] ", text)
+
+def askForModelString():
+    print("For some reason, the script couldn't find your model string.")
+    modelString = input("You need to enter it manually. (ex. A528BXXS6EWK1):")
+    return modelString
+
+def tryFindModelString(_content):
+    modelString = _content.decode('ascii', errors='replace').rfind("SM-") # This should be last, in the firmwares that I've seen at least.
+
+    # Try to fix this up soon
+    if modelString == -1:
+        finModelString = _content.decode('ascii', errors='replace').rfind(askForModelString())
+        if modelString == -1:
+            print("Can't find your model string. Sorry!")
+            exit(1)
+    else:
+        finModelString = modelString - 48 # Hopefully try to dehardcode this soon? Maybe from SignerVer offset?
+
+    return finModelString
 
 def main():
     global verbose
 
-    args = parse_args()
+    args = parseArgs()
 
     if args.verbose == True:
         verbose = 1
 
-    global just_print
+    if "super" in args.filename:
+        print("WARNING WARNING WARNING")
+        print("This tool won't work on super.imgs.")
+        print("They're too big for the tool to handle.")
+        exit(2)
 
-    if args.print == True:
-        just_print = 1
+    printVerbose("Trying to open file")
+
+    # This should be reworked for huge images!
+    file = open(args.filename, "rb")
+
+    fileContent = file.read()
+    file.close() 
+
+    modelStringOffset = tryFindModelString(fileContent)
+
+    currentBinRev = chr(fileContent[modelStringOffset + binRevOffset])
+
+    printVerbose(currentBinRev)
+    printVerbose(hex(modelStringOffset))
+
+    if currentBinRev == args.target:
+        print("Target binary revision is the same as current binary revision.")
+        exit(1)
     
-    fs = os.stat(args.filename)
-    size = fs.st_size - 1
-    print_verbose("Last byte offset: " + hex(size)) # calculate the offset of the last byte
+    fullBinRevOffset = modelStringOffset + binRevOffset
 
-    offset = int(size) - bin_offset_990
-    print_verbose("REV offset: " + str(hex(offset)))
+    newFileContent = fileContent[:fullBinRevOffset] + args.target.encode('ascii') + fileContent[(fullBinRevOffset + 1):]
+    
+    file = open(args.filename, "wb")
+    file.seek(0)
+    file.write(newFileContent)
+    file.close()
 
-    print_verbose("Opening file...")
-    fileptr = open(args.filename, "r+")
+    print("[*] Done!")
+    exit(0)
 
-    fileptr.seek(int(offset))
-    value = fileptr.read(1)
-    if just_print == 1:
-        print("BINARY REV: " + value.encode("utf-8").hex())
-        return 0
-    print_verbose("First revision: " + value.encode("utf-8").hex())
-
-    if len(str(int(args.target,16))) == 1:
-        toWrite = "0" + str(int(args.target,16))
-    elif len(str(int(args.target,16))) == 2:
-        toWrite = str(int(args.target,16))
-    else:
-        print("Invalid target value!")
-        return -2
-
-    byte_str = bytes.fromhex(toWrite) 
-    regular_str = byte_str.decode('utf-8')  
-
-    print_verbose("We are going to write " + regular_str.encode("utf-8").hex() + " to " + str(hex(offset)))
-
-    fileptr.seek(int(offset))
-
-    fileptr.write(regular_str)
-
-    print("Wrote " + str(int(args.target, 16)) + " to " + str(hex(offset)) + ".")
 main()
